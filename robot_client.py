@@ -125,13 +125,14 @@ class RobotClient:
                 message =f"{r_seq}|{r_cmd}|{r_payload}"
                 self.logger.tx(message, raw=raw, seq=r_seq)
 
-
                 if r_seq != seq:
                     # mismatched seq - ignore and keep waiting within same attempt
                     continue
                 if r_cmd == "ACK":
                     return r_payload  # success
                 elif r_cmd == "NACK":
+                    if r_payload == "BAD_CS":
+                        return self.request(cmd, payload)
                     raise RuntimeError(f"NACK: {r_payload}")
                 else:
                     # unexpected message type, continue waiting

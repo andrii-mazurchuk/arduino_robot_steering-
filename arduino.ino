@@ -45,7 +45,64 @@
 int basePWM = 140;
 int lastDir = 0; // -1 rev, 0 stop, +1 fwd
 const float MS_PER_CM  = 18.0; // tune for your robot
-const float MS_PER_DEG = 6.0;  // tune for your robot
+const float MS_PER_DEG = 6.0;
+
+// ===== Non-blocking motion state (scheduler) =====
+enum MotionState : uint8_t { MOT_IDLE, MOT_MOVE, MOT_ROTATE };
+
+struct MotionJob {
+  MotionState state = MOT_IDLE;
+  long param = 0;            // cm for M, deg for R (signed)
+  int speed = 0;             // PWM
+  char seq2[3] = "00";       // original hex sequence (2 chars + NUL)
+  unsigned long tStart = 0;
+  unsigned long tEnd   = 0;
+  bool inProgress = false;
+} motion;
+
+static inline void startMoveCm(long cm, int pwm, const char* seqHex) {
+  int dir = (cm >= 0) ? +1 : -1;
+  driveStraight(dir, pwm);
+  motion.state      = MOT_MOVE;
+  motion.param      = cm;
+  motion.speed      = pwm;
+  motion.tStart     = millis();
+  motion.tEnd       = motion.tStart + (unsigned long)(labs(cm) * MS_PER_CM);
+  motion.inProgress = true;
+  motion.seq2[0] = seqHex[0]; motion.seq2[1] = seqHex[1]; motion.seq2[2] = '\\0';
+}
+
+static inline void startRotateDeg(long deg, int pwm, const char* seqHex) {
+  int dir = (deg >= 0) ? +1 : -1;
+  rotateInPlace(dir, pwm);
+  motion.state      = MOT_ROTATE;
+  motion.param      = deg;
+  motion.speed      = pwm;
+  motion.tStart     = millis();
+  motion.tEnd       = motion.tStart + (unsigned long)(labs(deg) * MS_PER_DEG);
+  motion.inProgress = true;
+  motion.seq2[0] = seqHex[0]; motion.seq2[1] = seqHex[1]; motion.seq2[2] = '\\0';
+}
+
+static inline void cancelMotion() {
+  if (!motion.inProgress) return;
+  stopMotors();
+  motion.inProgress = false;
+  motion.state = MOT_IDLE;
+}
+
+static inline void updateMotion() {
+  if (!motion.inProgress) return;
+  unsigned long now = millis();
+  if ((long)(now - motion.tEnd) >= 0) {
+    stopMotors();
+    motion.inProgress = false;
+    motion.state = MOT_IDLE;
+    // NOTE: We do not send unsolicited events to keep protocol strict.
+    // The PC can poll STATUS to learn completion.
+  }
+}
+ // tune for your robot
 
 // === Parser state ===
 static const int MAX_FRAME = 96;
@@ -189,10 +246,21 @@ void handleCommand(const char* seq2, const char* cmd, const char* payload) {
   }
   // STATUS
   if (strcasecmp(cmd, "STATUS") == 0) {
-    char info[48];
-    const char* d = (lastDir > 0) ? "fwd" : (lastDir < 0) ? "rev" : "stop";
-    snprintf(info, sizeof(info), "STATUS:V=%d,DIR=%s", basePWM, d);
-    sendACK(seq2, info);
+  char info[64];
+  if (motion.inProgress) {
+    long tleft = (long)motion.tEnd - (long)millis();
+    if (tleft < 0) tleft = 0;
+    const char* st = (motion.state == MOT_MOVE) ? "MOVE" : "ROT";
+    snprintf(info, sizeof(info), "STATUS:V=%d,DIR=%s,MOT:%s,tleft:%ld",
+             basePWM,
+             (lastDir > 0) ? "fwd" : (lastDir < 0) ? "rev" : "stop",
+             st, tleft);
+  } else {
+    snprintf(info, sizeof(info), "STATUS:V=%d,DIR=%s,MOT:IDLE",
+             basePWM,
+             (lastDir > 0) ? "fwd" : (lastDir < 0) ? "rev" : "stop");
+  }
+  sendACK(seq2, info);
     return;
   }
   // V:<0..255>
@@ -203,35 +271,28 @@ void handleCommand(const char* seq2, const char* cmd, const char* payload) {
     sendACK(seq2, "OK");
     return;
   }
-  // M:<cm>
+  // M
   if (strcasecmp(cmd, "M") == 0) {
-    long cm = atol(payload);
-    int dir = (cm >= 0) ? +1 : -1;
-    unsigned long ms = (unsigned long)(labs(cm) * MS_PER_CM);
-    driveStraight(dir, basePWM);
-    delay(ms);
-    stopMotors();
-    sendACK(seq2, "OK");
+  long cm = atol(payload);
+  startMoveCm(cm, basePWM, seq2);
+  sendACK(seq2, "ACCEPTED");
     return;
   }
-  // R:<deg>
+// R
   if (strcasecmp(cmd, "R") == 0) {
-    long deg = atol(payload);
-    int dir = (deg >= 0) ? +1 : -1;
-    unsigned long ms = (unsigned long)(labs(deg) * MS_PER_DEG);
-    rotateInPlace(dir, basePWM);
-    delay(ms);
-    stopMotors();
-    sendACK(seq2, "OK");
+  long deg = atol(payload);
+  startRotateDeg(deg, basePWM, seq2);
+  sendACK(seq2, "ACCEPTED");
     return;
   }
-  // S
+// S
   if (strcasecmp(cmd, "S") == 0) {
-    stopMotors();
-    sendACK(seq2, "OK");
+  cancelMotion();
+  stopMotors();
+  sendACK(seq2, "STOPPED");
     return;
   }
-  // B
+// B
   if (strcasecmp(cmd, "B") == 0) {
     long d = sonarDistanceCM();
     char info[16];
@@ -343,7 +404,7 @@ void setup() {
 }
 
 void loop() {
-  while (Serial.available()) {
+while (Serial.available()) {
     char c = (char)Serial.read();
     if (!inFrame) {
       if (c == '^') {
@@ -369,4 +430,5 @@ void loop() {
       }
     }
   }
+  updateMotion();
 }

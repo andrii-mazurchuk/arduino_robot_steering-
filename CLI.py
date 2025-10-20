@@ -123,7 +123,9 @@ class RobotShell:
         else:
             print_err("Reconnect failed.")
 
-    def do_quit(self, *_): raise EOFError()
+    def do_quit(self, *_):
+        self.do_save_log("robot_logs.txt")
+        exit(0)
     def do_exit(self, *_): raise EOFError()
 
     # ---- Core REPL loop ----
@@ -174,7 +176,7 @@ class RobotShell:
             elif cmd in {"history"}:                 self.do_history()
             elif cmd in {"save-log", "savelog"}:     self.do_save_log(*args)
             elif cmd in {"reconnect"}:               self.do_reconnect(*args)
-            elif cmd in {"quit", "exit"}:            break
+            elif cmd in {"quit", "exit"}:            self.do_quit()
             else:
                 # Fallback: try raw token "CMD[:payload]" split by colon and spaces
                 if ":" in cmd:

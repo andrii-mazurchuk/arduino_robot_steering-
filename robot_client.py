@@ -10,10 +10,8 @@ Commands:
 
 import serial
 import time
-import argparse
-import sys
+import CLI
 
-# from app import send_command
 
 from log_manager import CommLogger
 
@@ -123,7 +121,7 @@ class RobotClient:
                 r_seq, r_cmd, r_payload = parse_frame(raw)
 
                 message =f"{r_seq}|{r_cmd}|{r_payload}"
-                self.logger.tx(message, raw=raw, seq=r_seq)
+                self.logger.rx(message, raw=raw, seq=r_seq)
 
                 if r_seq != seq:
                     # mismatched seq - ignore and keep waiting within same attempt
@@ -132,6 +130,8 @@ class RobotClient:
                     return r_payload  # success
                 elif r_cmd == "NACK":
                     if r_payload == "BAD_CS":
+                        CLI.print_warn(r_payload)
+                        CLI.print_info("resending command...")
                         return self.request(cmd, payload)
                     raise RuntimeError(f"NACK: {r_payload}")
                 else:
@@ -252,56 +252,3 @@ class RobotClient:
 
         print(f"Reconnect failed after {max_retries} attempts. Last error: {last_exc}")
         return self.ser, False
-
-
-def main():
-    ap = argparse.ArgumentParser(description="Robot serial client with checksum and retries")
-    ap.add_argument("--port", required=True, help="Serial port, e.g. COM6 or /dev/ttyUSB0", default="COM7")
-    ap.add_argument("--baud", type=int, default=9600)
-    ap.add_argument("cmd", nargs='*', help="Commands to send in order, e.g. PING V:160 M:20 B STATUS S")
-    args = ap.parse_args()
-
-    rc = RobotClient(args.port, args.baud)
-
-    if not args.cmd:
-        # demo sequence
-        cmds = ["PING", "HELP", "STATUS", "V:160", "M:20", "R:-90", "B", "I", "S", "STATUS"]
-    else:
-        cmds = args.cmd
-
-    for token in cmds:
-        if ':' in token:
-            c, p = token.split(':', 1)
-        else:
-            c, p = token, ""
-        c = c.strip().upper()
-        try:
-            if c == "PING":
-                resp = rc.ping()
-            elif c == "HELP":
-                resp = rc.help()
-            elif c == "STATUS":
-                resp = rc.status()
-            elif c == "HISTORY":
-                resp = rc.history()
-            elif c == "V":
-                resp = rc.set_v(int(p))
-            elif c == "M":
-                resp = rc.move_cm(int(p))
-            elif c == "R":
-                resp = rc.rotate_deg(int(p))
-            elif c == "S":
-                resp = rc.stop()
-            elif c == "B":
-                resp = rc.sonar()
-            elif c == "I":
-                resp = rc.ir()
-            else:
-                print(f">>> Unknown command token: {token}")
-                continue
-            print(f"<< {c}: {resp}")
-        except Exception as e:
-            print(f"<< ERROR for {token}: {e}", file=sys.stderr)
-
-if __name__ == "__main__":
-    main()

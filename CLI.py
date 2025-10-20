@@ -23,8 +23,6 @@ import shlex
 import sys
 from pathlib import Path
 from typing import Optional
-
-# IMPORTANT: we do NOT modify robot_client.py, only import it.
 from robot_client import RobotClient
 
 # ---------------------------
@@ -98,7 +96,6 @@ class RobotShell:
             print_err(f"Failed to save log: {e}")
 
     def do_reconnect(self, *args):
-        # Basic flag parsing (without external libs)
         port: Optional[str] = None
         baud: Optional[int] = None
         toks = list(args)
@@ -163,7 +160,7 @@ class RobotShell:
             cmd = parts[0].lower()
             args = parts[1:]
 
-            # Aliases
+
             if cmd in {"h", "?", "help"}:            self.do_help()
             elif cmd in {"ping"}:                    self.do_ping()
             elif cmd in {"status"}:                  self.do_status()

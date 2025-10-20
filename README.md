@@ -1,5 +1,3 @@
-Here’s a complete, repo-ready **README.md** for your project.
-
 # Arduino Robot Steering — PC ↔ Arduino Interface
 
 A small, pragmatic serial protocol and Python tooling to steer an Arduino-based mobile robot from a PC. It includes:
@@ -22,7 +20,6 @@ A small, pragmatic serial protocol and Python tooling to steer an Arduino-based 
 * [Commands (CMD) & Examples](#commands-cmd--examples)
 * [Security Description](#security-description)
 * [Logging](#logging)
-* [Test Scenarios](#test-scenarios)
 * [Arduino Firmware overview](#arduino-firmware-overview)
 * [Pin mapping](#pin-mapping-wiring)
 * [Motion model & calibration](#motion-model--calibration)
@@ -221,13 +218,6 @@ A **thread-safe** `CommLogger` attaches to the client:
   * `logs.txt` → compact human-readable lines
 * In-memory dump: `logger.to_string(fmt="txt"|"json"|"csv")` — used by `RobotClient.history()` and CLI `history`. 
 
----
-
-## Test Scenarios
-1) Create client → PING → expect PONG
-```python
-
-```
 ---
 
 ## Arduino Firmware overview

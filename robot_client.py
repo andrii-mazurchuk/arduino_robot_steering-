@@ -13,7 +13,9 @@ import time
 import argparse
 import sys
 
-from app import send_command
+# from app import send_command
+
+from log_manager import CommLogger
 
 START = b'^'
 END   = b'$'
@@ -96,6 +98,7 @@ def recv_frame(ser: serial.Serial, timeout: float) -> bytes:
 
 class RobotClient:
     def __init__(self, port: str, baud: int = 9600, base_timeout: float = 0.6, max_retries: int = 3):
+        self.logger = CommLogger()
         self.ser = open_serial(port, baud)
         self.seq = 0
         self.base_timeout = base_timeout
@@ -109,16 +112,20 @@ class RobotClient:
         seq = self.next_seq()
         frame = build_frame(seq, cmd, payload)
         text = frame.decode('utf-8')
-        # print(f"Sending frame: {text}")
         backoff = self.base_timeout
         for attempt in range(1, self.max_retries + 1):
             # send
+            self.logger.tx(text, raw=frame, seq=seq)
             self.ser.write(frame)
-
             # wait response
             try:
                 raw = recv_frame(self.ser, timeout=backoff)
                 r_seq, r_cmd, r_payload = parse_frame(raw)
+
+                message =f"{r_seq}|{r_cmd}|{r_payload}"
+                self.logger.tx(message, raw=raw, seq=r_seq)
+
+
                 if r_seq != seq:
                     # mismatched seq - ignore and keep waiting within same attempt
                     continue
@@ -149,8 +156,10 @@ class RobotClient:
     def rotate_deg(self, deg: int) -> str: return self.request("R", str(int(deg)))
     def stop(self) -> str: return self.request("S")
     def sonar(self) -> str: return self.request("B")
-
     def ir(self) -> str: return self.request("I")
+
+    def history(self) -> str: return self.logger.to_string()
+
 
     def is_link_alive(self, timeout_s=1.0):
         """
@@ -272,6 +281,8 @@ def main():
                 resp = rc.help()
             elif c == "STATUS":
                 resp = rc.status()
+            elif c == "HISTORY":
+                resp = rc.history()
             elif c == "V":
                 resp = rc.set_v(int(p))
             elif c == "M":

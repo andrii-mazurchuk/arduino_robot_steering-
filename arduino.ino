@@ -28,8 +28,8 @@
 #define PIN_LEFT_ENCODER        2
 
 #define PIN_RIGHT_MOTOR_SPEED   6
-#define PIN_RIGHT_MOTOR_FORWARD A2
-#define PIN_RIGHT_MOTOR_REVERSE A3
+#define PIN_RIGHT_MOTOR_FORWARD A3
+#define PIN_RIGHT_MOTOR_REVERSE A2
 #define PIN_RIGHT_ENCODER       3
 
 #define TRIGER_PIN              11
@@ -110,8 +110,8 @@ long sonarDistanceCM() {
 
   long duration = pulseIn(ECHO_PIN, HIGH, 30000UL);
   if (duration == 0) return 0;
-  long distance = (long)(duration * 0.034 / 2.0);
-  if (distance < 0) distance = 0;
+  long distance = duration * 0.034 / 2.0;
+  // if (distance < 0) distance = 0;
   return distance;
 }
 
